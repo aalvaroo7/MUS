@@ -1,60 +1,40 @@
+let usuarioLogueado = null;
+let amigoActualId = null;
+let pollingInterval = null;
+
 document.addEventListener("DOMContentLoaded", () => {
-    // 1. Verificar si hay usuario logueado. Si no, patada al login.
     const usuarioLocal = localStorage.getItem("usuario");
     if (!usuarioLocal) {
         window.location.href = "/index.html";
         return;
     }
+    usuarioLogueado = JSON.parse(usuarioLocal);
 
-    cargarUsuario();
+    cargarUsuarioEnHeader();
     cargarPublicaciones();
+    iniciarSistemaChat(); // <--- INICIA EL CHAT
 
-    // 2. Configurar botones
     const publicarBtn = document.getElementById("publicarBtn");
-    if (publicarBtn) {
-        publicarBtn.addEventListener("click", publicar);
-    }
+    if (publicarBtn) publicarBtn.addEventListener("click", publicar);
 
     const logoutBtn = document.getElementById("logout");
-    if (logoutBtn) {
-        logoutBtn.addEventListener("click", cerrarSesion);
-    }
+    if (logoutBtn) logoutBtn.addEventListener("click", cerrarSesion);
 
     const perfilBtn = document.getElementById("perfilBtn");
-    if (perfilBtn) {
-        perfilBtn.addEventListener("click", () => {
-            window.location.href = "/html/perfil.html";
-        });
-    }
+    if (perfilBtn) perfilBtn.addEventListener("click", () => window.location.href = "/html/perfil.html");
 });
 
-// ---------------------------------------------------------
-// MOSTRAR DATOS DEL USUARIO EN LA BARRA LATERAL / CABECERA
-// ---------------------------------------------------------
-function cargarUsuario() {
-    try {
-        const usuarioGuardado = JSON.parse(localStorage.getItem("usuario"));
-        if (usuarioGuardado) {
-            // Nombre de usuario
-            const nombreEl = document.getElementById("nombreUsuario");
-            if (nombreEl) nombreEl.textContent = usuarioGuardado.nombreUsuario || "Usuario";
-
-            // Opcional: Si tienes una imagen de perfil en la barra lateral
-            // const fotoEl = document.getElementById("miFotoSidebar");
-            // if (fotoEl && usuarioGuardado.fotoPerfil) fotoEl.src = usuarioGuardado.fotoPerfil;
-        }
-    } catch (e) {
-        console.error("Error leyendo usuario local:", e);
+// --- FUNCIONES DEL MURO ---
+function cargarUsuarioEnHeader() {
+    if (usuarioLogueado) {
+        const nombreEl = document.getElementById("nombreUsuario");
+        if (nombreEl) nombreEl.textContent = usuarioLogueado.nombreUsuario || "Usuario";
     }
 }
 
-// ---------------------------------------------------------
-// PUBLICAR NUEVO MENSAJE
-// ---------------------------------------------------------
 async function publicar() {
     const textoInput = document.getElementById("postTexto");
     const imagenInput = document.getElementById("postImagen");
-
     const contenido = textoInput.value;
     const archivo = imagenInput.files[0];
 
@@ -65,155 +45,182 @@ async function publicar() {
 
     const formData = new FormData();
     formData.append("contenido", contenido);
-    if (archivo) {
-        formData.append("archivo", archivo);
-    }
+    // IMPORTANTE: Enviamos el ID del usuario si el backend lo necesita explícitamente,
+    // aunque idealmente lo coge de la sesión. Lo añado por si acaso.
+    formData.append("usuarioId", usuarioLogueado.id);
+    if (archivo) formData.append("archivo", archivo);
 
     try {
-        const response = await fetch('/api/publicaciones/crear', {
-            method: 'POST',
-            body: formData
-        });
-
+        const response = await fetch('/api/publicaciones/crear', { method: 'POST', body: formData });
         if (response.ok) {
             textoInput.value = "";
             imagenInput.value = "";
-            cargarPublicaciones(); // Recargar el muro para ver el nuevo post
+            cargarPublicaciones();
         } else {
-            if (response.status === 401) {
-                window.location.href = "/index.html";
-            } else {
-                const msg = await response.text();
-                alert("Error al publicar: " + msg);
-            }
+            alert("Error al publicar.");
         }
     } catch (error) {
         console.error("Error:", error);
-        alert("Error de conexión.");
     }
 }
 
-// ---------------------------------------------------------
-// CARGAR EL MURO (FEED)
-// ---------------------------------------------------------
 async function cargarPublicaciones() {
     try {
         const response = await fetch('/api/publicaciones/todas');
-
-        if (response.status === 401) {
-            window.location.href = "/index.html";
-            return;
-        }
-
+        if (!response.ok) return;
         const publicaciones = await response.json();
         const feed = document.getElementById("feed");
-        feed.innerHTML = ""; // Limpiar antes de pintar
+        feed.innerHTML = "";
 
-        // Ordenar: más recientes primero
         publicaciones.sort((a, b) => new Date(b.fechaPublicacion) - new Date(a.fechaPublicacion));
 
         if (publicaciones.length === 0) {
-            feed.innerHTML = "<p style='text-align:center; padding:20px;'>No hay publicaciones aún. ¡Sé el primero!</p>";
+            feed.innerHTML = "<p style='text-align:center; padding:20px; color:#777;'>No hay publicaciones.</p>";
             return;
         }
-
-        // Obtenemos ID del usuario actual para saber si mostrar el botón de borrar
-        const usuarioActual = JSON.parse(localStorage.getItem("usuario"));
-        const miId = usuarioActual ? usuarioActual.id : null;
 
         publicaciones.forEach(pub => {
             const postDiv = document.createElement("div");
             postDiv.className = "post";
 
-            const fecha = new Date(pub.fechaPublicacion).toLocaleString();
+            // Avatar
+            let avatarUrl = pub.usuario && pub.usuario.fotoPerfil ? pub.usuario.fotoPerfil : `https://ui-avatars.com/api/?name=${pub.usuario ? pub.usuario.nombreUsuario : "U"}&background=random`;
 
-            // --- LÓGICA DE FOTO DE PERFIL ---
-            let avatarUrl = "";
+            // Botón borrar
+            let botonBorrar = (pub.usuario && pub.usuario.id === usuarioLogueado.id)
+                ? `<button onclick="borrarPublicacion(${pub.id})" style="border:none; background:none; cursor:pointer;">🗑️</button>`
+                : "";
 
-            // 1. Si el autor del post tiene foto en BD, la usamos
-            if (pub.usuario && pub.usuario.fotoPerfil) {
-                avatarUrl = pub.usuario.fotoPerfil;
-            }
-            // 2. Si no, usamos avatar de letras (ui-avatars)
-            else {
-                const nombreParaAvatar = pub.usuario ? pub.usuario.nombreUsuario : "A";
-                avatarUrl = `https://ui-avatars.com/api/?name=${nombreParaAvatar}&background=random&rounded=true`;
-            }
-
-            // Crear el HTML de la imagen redonda pequeña
-            const avatarHtml = `<img src="${avatarUrl}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; margin-right: 10px; border: 1px solid #ddd;">`;
-
-            // Botón de borrar (solo si es mi post)
-            let botonBorrar = "";
-            if (pub.usuario && pub.usuario.id === miId) {
-                botonBorrar = `<button onclick="borrarPublicacion(${pub.id})" class="borrar-btn" style="background:none; border:none; cursor:pointer;">🗑️</button>`;
-            }
-
-            // Imagen del contenido del post (si la hay)
-            let imagenPostHtml = "";
-            if (pub.imagenUrl) {
-                imagenPostHtml = `<img src="${pub.imagenUrl}" class="post-img" style="max-width:100%; margin-top:10px; border-radius: 8px;">`;
-            }
+            // Imagen post
+            let imgHtml = pub.imagenUrl ? `<img src="${pub.imagenUrl}" style="max-width:100%; margin-top:10px; border-radius:5px;">` : "";
 
             postDiv.innerHTML = `
-                <div class="post-header" style="display:flex; align-items: center; justify-content:space-between; margin-bottom: 10px;">
-                    <div style="display:flex; align-items:center;">
-                        ${avatarHtml}
-                        <div>
-                            <strong style="display:block; line-height:1;">${pub.usuario ? pub.usuario.nombreUsuario : "Anónimo"}</strong>
-                            <small style="color: #666; font-size: 0.8em;">${fecha}</small>
-                        </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <img src="${avatarUrl}" style="width:40px; height:40px; border-radius:50%; object-fit:cover;">
+                        <strong>${pub.usuario ? pub.usuario.nombreUsuario : "Anónimo"}</strong>
                     </div>
                     ${botonBorrar}
                 </div>
-                <div class="post-content">
-                    <p style="margin: 0; white-space: pre-wrap;">${pub.contenido}</p>
-                    ${imagenPostHtml}
-                </div>
-                <hr style="margin-top: 15px; border: 0; border-top: 1px solid #eee;">
+                <p>${pub.contenido}</p>
+                ${imgHtml}
+                <hr style="margin-top:15px; border-top:1px solid #eee;">
             `;
             feed.appendChild(postDiv);
         });
-
-    } catch (error) {
-        console.error("Error cargando feed:", error);
-    }
+    } catch (e) { console.error(e); }
 }
 
-// ---------------------------------------------------------
-// BORRAR PUBLICACIÓN
-// ---------------------------------------------------------
 async function borrarPublicacion(id) {
-    if(!confirm("¿Seguro que quieres borrar esta publicación?")) return;
-
-    try {
-        const response = await fetch(`/api/publicaciones/eliminar/${id}`, { method: 'DELETE' });
-        if (response.ok) {
-            cargarPublicaciones(); // Recargar lista
-        } else {
-            alert("No se pudo eliminar.");
-        }
-    } catch (e) {
-        console.error(e);
-        alert("Error de conexión");
+    if(confirm("¿Borrar publicación?")) {
+        await fetch(`/api/publicaciones/eliminar/${id}`, { method: 'DELETE' });
+        cargarPublicaciones();
     }
 }
 
-// ---------------------------------------------------------
-// CERRAR SESIÓN (SOLUCIÓN AL ERROR WHITELABEL)
-// ---------------------------------------------------------
-function cerrarSesion(event) {
-    if(event) event.preventDefault(); // Evita que el botón recargue la página si es un form
-
-    // 1. Limpiamos datos locales inmediatamente
+function cerrarSesion(e) {
+    if(e) e.preventDefault();
     localStorage.removeItem("usuario");
+    if(pollingInterval) clearInterval(pollingInterval);
+    fetch('/api/usuarios/logout', { method: 'POST' }).finally(() => window.location.href = "/html/login.html");
+}
 
-    // 2. Intentamos avisar al servidor
-    fetch('/api/usuarios/logout', {
-        method: 'POST'
-    })
-        .finally(() => {
-            // 3. Pase lo que pase (éxito o error 404), redirigimos al login
-            window.location.href = "/html/login.html";
+// --- FUNCIONES DEL CHAT (NUEVO) ---
+
+function iniciarSistemaChat() {
+    document.getElementById("chatBtn").addEventListener("click", () => {
+        const ventana = document.getElementById("ventanaChat");
+        ventana.style.display = (ventana.style.display === "none" || !ventana.style.display) ? "flex" : "none";
+        if(ventana.style.display === "flex") cargarAmigosChat();
+    });
+
+    document.getElementById("btnEnviarMsg").addEventListener("click", enviarMensajeChat);
+
+    // Buscar mensajes nuevos cada 3 segs
+    actualizarNotificaciones();
+    pollingInterval = setInterval(actualizarNotificaciones, 3000);
+}
+
+function actualizarNotificaciones() {
+    fetch(`/api/chat/notificaciones?miId=${usuarioLogueado.id}`)
+        .then(res => res.json())
+        .then(num => {
+            const badge = document.getElementById("notificacionBadge");
+            if(num > 0) {
+                badge.style.display = "block";
+                badge.innerText = num;
+            } else {
+                badge.style.display = "none";
+            }
+        }).catch(e => {});
+}
+
+function cargarAmigosChat() {
+    const lista = document.getElementById("listaAmigosChat");
+    lista.innerHTML = "<p style='padding:10px; text-align:center'>Cargando...</p>";
+
+    fetch(`/api/usuarios/${usuarioLogueado.id}/amigos`)
+        .then(res => res.ok ? res.json() : [])
+        .then(amigos => {
+            lista.innerHTML = "";
+            if(amigos.length === 0) {
+                lista.innerHTML = "<p style='padding:20px; text-align:center'>No tienes amigos agregados.</p>";
+                return;
+            }
+            amigos.forEach(amigo => {
+                const div = document.createElement("div");
+                div.className = "friend-item";
+                div.innerHTML = `<span>👤 ${amigo.nombreUsuario}</span>`;
+                div.onclick = () => abrirConversacion(amigo.id, amigo.nombreUsuario);
+                lista.appendChild(div);
+            });
+        });
+}
+
+function abrirConversacion(idAmigo, nombre) {
+    amigoActualId = idAmigo;
+    document.getElementById("chatTitulo").innerText = nombre;
+    document.getElementById("listaAmigosChat").style.display = "none";
+    document.getElementById("zonaConversacion").style.display = "flex";
+    cargarHistorial();
+}
+
+function volverALista() {
+    amigoActualId = null;
+    document.getElementById("chatTitulo").innerText = "Mis Amigos";
+    document.getElementById("zonaConversacion").style.display = "none";
+    document.getElementById("listaAmigosChat").style.display = "block";
+    cargarAmigosChat();
+}
+
+function cargarHistorial() {
+    if(!amigoActualId) return;
+    const container = document.getElementById("mensajesContainer");
+
+    fetch(`/api/chat/historial?miId=${usuarioLogueado.id}&amigoId=${amigoActualId}`)
+        .then(res => res.json())
+        .then(msgs => {
+            container.innerHTML = "";
+            msgs.forEach(m => {
+                const div = document.createElement("div");
+                div.className = "msg-bubble " + (m.emisor.id === usuarioLogueado.id ? "msg-mio" : "msg-otro");
+                div.innerText = m.contenido;
+                container.appendChild(div);
+            });
+            container.scrollTop = container.scrollHeight;
+        });
+}
+
+function enviarMensajeChat() {
+    const input = document.getElementById("inputMensaje");
+    const txt = input.value.trim();
+    if(!txt || !amigoActualId) return;
+
+    fetch(`/api/chat/enviar?emisorId=${usuarioLogueado.id}&receptorId=${amigoActualId}&contenido=${encodeURIComponent(txt)}`, { method: "POST" })
+        .then(res => {
+            if(res.ok) {
+                input.value = "";
+                cargarHistorial();
+            }
         });
 }

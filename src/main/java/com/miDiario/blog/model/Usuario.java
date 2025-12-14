@@ -4,9 +4,13 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
+import java.util.HashSet;
+import java.util.Set;
 
 @Entity
-@Table(name = "usuarios") // Tu tabla en la BD
+@Table(name = "usuarios")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -40,12 +44,25 @@ public class Usuario {
     @Column(name = "activo", nullable = false)
     private boolean activo = true;
 
-    // --- NUEVO CAMPO PARA LA FOTO ---
     @Column(name = "foto_perfil", columnDefinition = "LONGTEXT")
     private String fotoPerfil;
-    // -------------------------------
 
     @ManyToOne
     @JoinColumn(name = "rol_id")
     private Rol rol;
+
+    // --- NUEVO: LISTA DE AMIGOS ---
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "usuarios_amigos",
+            joinColumns = @JoinColumn(name = "usuario_id"),
+            inverseJoinColumns = @JoinColumn(name = "amigo_id")
+    )
+    @JsonIgnore
+    private Set<Usuario> amigos = new HashSet<>();
+
+    // --- NUEVO: MENSAJES RECIBIDOS ---
+    @OneToMany(mappedBy = "receptor")
+    @JsonIgnore
+    private Set<Mensaje> mensajesRecibidos;
 }

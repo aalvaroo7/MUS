@@ -2,9 +2,12 @@ package com.miDiario.blog.controller;
 
 import com.miDiario.blog.model.Usuario;
 import com.miDiario.blog.service.UsuarioService;
+import com.miDiario.blog.repository.UsuarioRepository; // Importante para buscar amigos
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Set; // Necesario para la lista de amigos
 
 @RestController
 @RequestMapping("/api/usuarios")
@@ -12,9 +15,22 @@ import org.springframework.web.bind.annotation.*;
 public class UsuarioController {
 
     private final UsuarioService usuarioService;
+    private final UsuarioRepository usuarioRepository; // Añadimos esto para leer amigos directamente
 
-    public UsuarioController(UsuarioService usuarioService) {
+    // Constructor actualizado inyectando ambos
+    public UsuarioController(UsuarioService usuarioService, UsuarioRepository usuarioRepository) {
         this.usuarioService = usuarioService;
+        this.usuarioRepository = usuarioRepository;
+    }
+
+    // ============================================================
+    // NUEVO: OBTENER LISTA DE AMIGOS (PARA EL CHAT)
+    // ============================================================
+    @GetMapping("/{id}/amigos")
+    public ResponseEntity<Set<Usuario>> obtenerAmigos(@PathVariable Long id) {
+        return usuarioRepository.findById(id)
+                .map(usuario -> ResponseEntity.ok(usuario.getAmigos()))
+                .orElse(ResponseEntity.notFound().build());
     }
 
     // ============================================================
@@ -28,7 +44,12 @@ public class UsuarioController {
 
         Long usuarioSesionId = (Long) session.getAttribute("usuarioId");
 
+        // Nota: Si usas Spring Security con 'permitAll', la sesión puede ser null a veces.
+        // Asegúrate de gestionar esto en el frontend enviando el ID si es necesario,
+        // o confiando en la sesión si el login la crea correctamente.
         if (usuarioSesionId == null) {
+            // Intenta ver si el ID coincide aunque no haya sesión (para pruebas locales)
+            // O devuelve error estricto:
             return ResponseEntity.status(401).body("No has iniciado sesión.");
         }
 
@@ -48,11 +69,10 @@ public class UsuarioController {
     }
 
     // ============================================================
-    // CERRAR SESIÓN (LOGOUT) - ¡ESTO FALTABA!
+    // CERRAR SESIÓN (LOGOUT)
     // ============================================================
     @PostMapping("/logout")
     public ResponseEntity<?> cerrarSesion(HttpSession session) {
-        // Llamamos al servicio para limpiar la sesión
         usuarioService.logout(session);
         return ResponseEntity.ok("Sesión cerrada correctamente");
     }

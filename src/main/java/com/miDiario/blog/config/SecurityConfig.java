@@ -1,4 +1,5 @@
 package com.miDiario.blog.config;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -17,15 +18,16 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 
         http
+                // Desactivar CSRF permite hacer POSTs desde JS fácilmente
                 .csrf(csrf -> csrf.disable())
+
+                // Permitir todo (incluido /api/chat/...)
                 .authorizeHttpRequests(auth -> auth
                         .anyRequest().permitAll()
                 )
-                // DESACTIVAR LOGIN POR DEFECTO
+                // Configuraciones por defecto desactivadas para que no molesten
                 .formLogin(form -> form.disable())
-                // DESACTIVAR LOGOUT DE SPRING SECURITY
                 .logout(logout -> logout.disable())
-                // DESACTIVAR AUTENTICACIÓN BÁSICA
                 .httpBasic(httpBasic -> httpBasic.disable());
 
         return http.build();
