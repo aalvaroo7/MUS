@@ -13,6 +13,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+
 @Service
 public class UsuarioService {
 
@@ -32,32 +34,37 @@ public class UsuarioService {
     }
 
     // ============================================================
-    // ACTUALIZAR PERFIL (TU CÓDIGO: INCLUYE FOTO Y DATOS)
+    // MÉTODOS BÁSICOS DE BÚSQUEDA (NUEVOS/NECESARIOS)
+    // ============================================================
+    public Usuario findById(Long id) {
+        return usuarioRepo.findById(id).orElse(null);
+    }
+
+    public List<Usuario> findAll() {
+        return usuarioRepo.findAll();
+    }
+
+    // ============================================================
+    // ACTUALIZAR PERFIL
     // ============================================================
     public Usuario actualizar(Long id, Usuario datosNuevos) {
-        // 1. Buscar usuario existente
         Usuario usuarioExistente = usuarioRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
-        // --- ACTUALIZAR DATOS PERSONALES ---
         if (datosNuevos.getNombre() != null && !datosNuevos.getNombre().isEmpty()) {
             usuarioExistente.setNombre(datosNuevos.getNombre());
         }
-
         if (datosNuevos.getApellidos() != null) {
             usuarioExistente.setApellidos(datosNuevos.getApellidos());
         }
-
         if (datosNuevos.getGenero() != null) {
             usuarioExistente.setGenero(datosNuevos.getGenero());
         }
-
-        // --- ¡CLAVE! GUARDAR FOTO DE PERFIL ---
         if (datosNuevos.getFotoPerfil() != null && !datosNuevos.getFotoPerfil().isEmpty()) {
             usuarioExistente.setFotoPerfil(datosNuevos.getFotoPerfil());
         }
 
-        // --- VALIDACIONES DE SEGURIDAD (Nick y Email) ---
+        // Validaciones Nick y Email
         if (datosNuevos.getNombreUsuario() != null && !datosNuevos.getNombreUsuario().isEmpty()) {
             if (!datosNuevos.getNombreUsuario().equals(usuarioExistente.getNombreUsuario()) &&
                     usuarioRepo.existsByNombreUsuario(datosNuevos.getNombreUsuario())) {
@@ -74,56 +81,40 @@ public class UsuarioService {
             usuarioExistente.setEmail(datosNuevos.getEmail());
         }
 
-        // Guardar y Auditar
         Usuario guardado = usuarioRepo.save(usuarioExistente);
         registrarAuditoria(guardado, "PERFIL_ACTUALIZADO", true, "Usuario actualizó perfil/foto");
         return guardado;
     }
 
     // ============================================================
-    // REGISTRO (CÓDIGO FUSIONADO CON EL DE TU AMIGO)
+    // REGISTRO
     // ============================================================
     public String registrar(RegistroDTO dto) {
-        if (usuarioRepo.existsByEmail(dto.getEmail())) {
-            return "El correo ya está registrado";
-        }
-        if (usuarioRepo.existsByNombreUsuario(dto.getNombreUsuario())) {
-            return "El nombre de usuario ya está en uso";
-        }
-        if (dto.getPassword() == null || dto.getPassword().length() < 8) {
-            return "La contraseña debe tener al menos 8 caracteres";
-        }
+        if (usuarioRepo.existsByEmail(dto.getEmail())) return "El correo ya está registrado";
+        if (usuarioRepo.existsByNombreUsuario(dto.getNombreUsuario())) return "El nombre de usuario ya está en uso";
+        if (dto.getPassword() == null || dto.getPassword().length() < 8) return "La contraseña debe tener al menos 8 caracteres";
 
         Rol rolUsuario = rolRepo.findByNombre("USUARIO");
-        if (rolUsuario == null) {
-            // Esto es importante tenerlo controlado
-            throw new RuntimeException("ERROR CRÍTICO: El rol 'USUARIO' no existe en la base de datos.");
-        }
+        if (rolUsuario == null) throw new RuntimeException("ERROR CRÍTICO: El rol 'USUARIO' no existe.");
 
         Usuario u = new Usuario();
         u.setNombre(dto.getNombre());
         u.setNombreUsuario(dto.getNombreUsuario());
         u.setEmail(dto.getEmail());
         u.setPassword(encoder.encode(dto.getPassword()));
-
-        // --- AQUÍ ESTÁ EL CAMBIO DE TU AMIGO ---
-        // Ahora recogemos apellidos y género desde el registro, ya no son null
         u.setApellidos(dto.getApellidos());
         u.setGenero(dto.getGenero());
-        // ---------------------------------------
-
         u.setRol(rolUsuario);
         u.setActivo(true);
         u.setIntentosFallidos(0);
 
         usuarioRepo.save(u);
         registrarAuditoria(u, "REGISTRO_USUARIO", true, "Usuario registrado correctamente");
-
         return "Usuario registrado correctamente";
     }
 
     // ============================================================
-    // LOGIN (SEGURO Y AUDITADO)
+    // LOGIN
     // ============================================================
     public String login(LoginDTO dto, HttpSession session) {
         Usuario u = buscarPorIdentificador(dto.getIdentificador());
@@ -138,7 +129,6 @@ public class UsuarioService {
             return "Usuario bloqueado";
         }
 
-        // Compatibilidad con contraseñas antiguas (texto plano)
         String passwordBD = u.getPassword();
         if (passwordBD != null && !passwordBD.startsWith("$2a$")) {
             u.setPassword(encoder.encode(passwordBD));
@@ -152,7 +142,6 @@ public class UsuarioService {
             return "Contraseña incorrecta";
         }
 
-        // Login exitoso
         u.setIntentosFallidos(0);
         usuarioRepo.save(u);
 
@@ -177,7 +166,7 @@ public class UsuarioService {
     }
 
     // ============================================================
-    // MÉTODOS AUXILIARES Y ADMIN
+    // MÉTODOS ADMIN
     // ============================================================
     public Usuario buscarPorIdentificador(String identificador) {
         if (identificador != null && identificador.contains("@")) {
@@ -188,7 +177,6 @@ public class UsuarioService {
 
     public ResponseEntity<?> bloquear(Long adminId, Long usuarioId) {
         if (!esAdmin(adminId)) return ResponseEntity.status(403).body("No tienes permisos de administrador");
-
         Usuario u = usuarioRepo.findById(usuarioId).orElse(null);
         if (u == null) return ResponseEntity.status(404).body("Usuario no encontrado");
 
@@ -200,7 +188,6 @@ public class UsuarioService {
 
     public ResponseEntity<?> desbloquear(Long adminId, Long usuarioId) {
         if (!esAdmin(adminId)) return ResponseEntity.status(403).body("No tienes permisos de administrador");
-
         Usuario u = usuarioRepo.findById(usuarioId).orElse(null);
         if (u == null) return ResponseEntity.status(404).body("Usuario no encontrado");
 
@@ -217,11 +204,15 @@ public class UsuarioService {
     }
 
     private void registrarAuditoria(Usuario usuario, String accion, boolean exito, String detalles) {
-        Auditoria audit = new Auditoria();
-        audit.setUsuario(usuario);
-        audit.setAccion(accion);
-        audit.setExito(exito);
-        audit.setDetalles(detalles);
-        auditoriaRepo.save(audit);
+        try {
+            Auditoria audit = new Auditoria();
+            audit.setUsuario(usuario);
+            audit.setAccion(accion);
+            audit.setExito(exito);
+            audit.setDetalles(detalles);
+            auditoriaRepo.save(audit);
+        } catch (Exception e) {
+            System.err.println("Error al guardar auditoría: " + e.getMessage());
+        }
     }
 }

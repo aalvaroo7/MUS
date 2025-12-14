@@ -1,13 +1,16 @@
 package com.miDiario.blog.controller;
 
+import com.miDiario.blog.model.Amistad;
 import com.miDiario.blog.model.Usuario;
+import com.miDiario.blog.repository.AmistadRepository;
+import com.miDiario.blog.repository.UsuarioRepository;
 import com.miDiario.blog.service.UsuarioService;
-import com.miDiario.blog.repository.UsuarioRepository; // Importante para buscar amigos
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Set; // Necesario para la lista de amigos
+import java.util.ArrayList;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/usuarios")
@@ -15,26 +18,46 @@ import java.util.Set; // Necesario para la lista de amigos
 public class UsuarioController {
 
     private final UsuarioService usuarioService;
-    private final UsuarioRepository usuarioRepository; // Añadimos esto para leer amigos directamente
+    private final UsuarioRepository usuarioRepository;
+    private final AmistadRepository amistadRepository; // <--- NUEVA DEPENDENCIA
 
-    // Constructor actualizado inyectando ambos
-    public UsuarioController(UsuarioService usuarioService, UsuarioRepository usuarioRepository) {
+    // Constructor actualizado inyectando los 3 componentes
+    public UsuarioController(UsuarioService usuarioService,
+                             UsuarioRepository usuarioRepository,
+                             AmistadRepository amistadRepository) {
         this.usuarioService = usuarioService;
         this.usuarioRepository = usuarioRepository;
+        this.amistadRepository = amistadRepository;
     }
 
     // ============================================================
-    // NUEVO: OBTENER LISTA DE AMIGOS (PARA EL CHAT)
+    // OBTENER LISTA DE AMIGOS (ACTUALIZADO PARA SOLICITUDES)
     // ============================================================
+    // Este endpoint es el que usa el CHAT para saber con quién puedes hablar.
+    // Ahora busca solo las amistades que estén en estado 'ACEPTADA'.
     @GetMapping("/{id}/amigos")
-    public ResponseEntity<Set<Usuario>> obtenerAmigos(@PathVariable Long id) {
-        return usuarioRepository.findById(id)
-                .map(usuario -> ResponseEntity.ok(usuario.getAmigos()))
-                .orElse(ResponseEntity.notFound().build());
+    public ResponseEntity<List<Usuario>> obtenerAmigos(@PathVariable Long id) {
+        // 1. Buscamos todas las relaciones aceptadas donde participa el usuario
+        List<Amistad> amistades = amistadRepository.misAmigos(id);
+
+        List<Usuario> amigos = new ArrayList<>();
+
+        // 2. Filtramos para obtener a "la otra persona"
+        for (Amistad a : amistades) {
+            // Si el ID coincide con el solicitante, el amigo es el receptor
+            if (a.getSolicitante().getId().equals(id)) {
+                amigos.add(a.getReceptor());
+            }
+            // Si no, el amigo es el solicitante
+            else {
+                amigos.add(a.getSolicitante());
+            }
+        }
+        return ResponseEntity.ok(amigos);
     }
 
     // ============================================================
-    // ACTUALIZAR PERFIL
+    // ACTUALIZAR PERFIL (Mantenemos tu lógica original)
     // ============================================================
     @PutMapping("/actualizar/{id}")
     public ResponseEntity<?> actualizarPerfil(
@@ -44,12 +67,10 @@ public class UsuarioController {
 
         Long usuarioSesionId = (Long) session.getAttribute("usuarioId");
 
-        // Nota: Si usas Spring Security con 'permitAll', la sesión puede ser null a veces.
-        // Asegúrate de gestionar esto en el frontend enviando el ID si es necesario,
-        // o confiando en la sesión si el login la crea correctamente.
+        // Verificación de seguridad
         if (usuarioSesionId == null) {
-            // Intenta ver si el ID coincide aunque no haya sesión (para pruebas locales)
-            // O devuelve error estricto:
+            // Si estás probando sin login, puedes comentar este bloque,
+            // pero para producción es necesario.
             return ResponseEntity.status(401).body("No has iniciado sesión.");
         }
 

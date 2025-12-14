@@ -5,8 +5,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
-
-import java.util.HashSet;
 import java.util.Set;
 
 @Entity
@@ -51,18 +49,12 @@ public class Usuario {
     @JoinColumn(name = "rol_id")
     private Rol rol;
 
-    // --- NUEVO: LISTA DE AMIGOS ---
-    @ManyToMany(fetch = FetchType.LAZY)
-    @JoinTable(
-            name = "usuarios_amigos",
-            joinColumns = @JoinColumn(name = "usuario_id"),
-            inverseJoinColumns = @JoinColumn(name = "amigo_id")
-    )
-    @JsonIgnore
-    private Set<Usuario> amigos = new HashSet<>();
-
-    // --- NUEVO: MENSAJES RECIBIDOS ---
-    @OneToMany(mappedBy = "receptor")
+    // --- MENSAJES RECIBIDOS (Para el chat) ---
+    // Mantenemos esto para que Hibernate sepa gestionar los mensajes borrados si borras un usuario
+    @OneToMany(mappedBy = "receptor", cascade = CascadeType.ALL)
     @JsonIgnore
     private Set<Mensaje> mensajesRecibidos;
+
+    // NOTA: Hemos eliminado 'Set<Usuario> amigos' porque ahora la amistad
+    // se gestiona a través de la entidad 'Amistad' y el 'AmistadRepository'.
 }

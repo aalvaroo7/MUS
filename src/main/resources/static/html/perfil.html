@@ -6,53 +6,120 @@
     <title>Mi Perfil - Mi Diario</title>
     <link rel="stylesheet" href="../css/perfil.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        /* AÑADIDOS EXTRA PARA EL SISTEMA DE AMIGOS */
+        .layout-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr; /* Dos columnas: Izq Perfil, Der Amigos */
+            gap: 2rem;
+            max-width: 1000px;
+            width: 95%;
+            margin: 2rem auto;
+        }
+
+        .card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            padding: 2rem;
+        }
+
+        .friends-section h3 { margin-bottom: 15px; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+
+        .user-item {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 10px; border-bottom: 1px solid #f0f0f0;
+        }
+        .user-info { display: flex; align-items: center; gap: 10px; }
+        .user-avatar-mini { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
+
+        .btn-mini { padding: 5px 10px; border-radius: 5px; border: none; cursor: pointer; font-size: 0.8em; color: white; }
+        .btn-add { background: #28a745; }
+        .btn-accept { background: #007bff; margin-right: 5px; }
+        .btn-reject { background: #dc3545; }
+        .btn-pending { background: #ffc107; color: #333; cursor: default; }
+
+        .search-box { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 15px; }
+
+        .tab-buttons { display: flex; gap: 10px; margin-bottom: 15px; }
+        .tab-btn { flex: 1; padding: 8px; background: #eee; border: none; border-radius: 5px; cursor: pointer; }
+        .tab-btn.active { background: #6c63ff; color: white; }
+
+        @media (max-width: 768px) {
+            .layout-grid { grid-template-columns: 1fr; }
+        }
+    </style>
 </head>
 <body>
 
-<div class="main-container">
-    <div class="profile-card">
+<div class="layout-grid">
 
+    <div class="card profile-card">
         <div class="profile-header">
             <div style="position: relative; display: inline-block; cursor: pointer;" onclick="document.getElementById('fileInput').click()">
                 <img id="avatarImg" src="" alt="Avatar" class="avatar" style="width: 120px; height: 120px; object-fit: cover; border-radius: 50%;">
-
                 <span style="position: absolute; bottom: 5px; right: 5px; background: #4F46E5; color: white; padding: 6px; border-radius: 50%; border: 2px solid white; font-size: 14px;">📷</span>
             </div>
-
             <input type="file" id="fileInput" style="display: none;" accept="image/*">
-
             <h2 id="headerNombre">Cargando...</h2>
             <p class="rol-badge" id="rolBadge">Estudiante</p>
         </div>
+
         <form id="perfilForm">
             <div class="form-grid">
                 <div class="input-group">
                     <label>Nombre completo ✏️</label>
                     <input type="text" id="nombre" required class="enabled-input">
                 </div>
-
                 <div class="input-group">
                     <label>Género</label>
                     <input type="text" id="genero" disabled class="disabled-input">
                 </div>
-
                 <div class="input-group full-width">
-                    <label for="nombreUsuario">Nombre de Usuario ✏️</label>
+                    <label>Nombre de Usuario ✏️</label>
                     <input type="text" id="nombreUsuario" required placeholder="Tu nick">
                 </div>
-
                 <div class="input-group full-width">
-                    <label for="email">Correo Electrónico ✏️</label>
+                    <label>Correo Electrónico ✏️</label>
                     <input type="email" id="email" required placeholder="correo@ejemplo.com">
                 </div>
             </div>
-
             <div class="actions">
                 <button type="button" id="volverBtn" class="btn-secondary">Volver al Muro</button>
                 <button type="submit" id="guardarBtn" class="btn-primary">Guardar Cambios</button>
             </div>
         </form>
     </div>
+
+    <div class="card friends-section">
+        <h3>👥 Gestión de Amistades</h3>
+
+        <div class="tab-buttons">
+            <button class="tab-btn active" onclick="mostrarTab('amigos')">Mis Amigos</button>
+            <button class="tab-btn" onclick="mostrarTab('solicitudes')">
+                Solicitudes <span id="badgeSolicitudes" style="background:red; color:white; border-radius:50%; padding:2px 6px; font-size:10px; display:none;">0</span>
+            </button>
+            <button class="tab-btn" onclick="mostrarTab('buscar')">Buscar</button>
+        </div>
+
+        <div id="tab-amigos">
+            <div id="listaAmigos">Cargando amigos...</div>
+        </div>
+
+        <div id="tab-solicitudes" style="display: none;">
+            <h4>Recibidas (Pendientes)</h4>
+            <div id="listaRecibidas"><p class="text-muted">No tienes invitaciones pendientes.</p></div>
+
+            <h4 style="margin-top: 20px;">Enviadas</h4>
+            <div id="listaEnviadas"><p class="text-muted">No has enviado invitaciones.</p></div>
+        </div>
+
+        <div id="tab-buscar" style="display: none;">
+            <input type="text" id="buscadorUsuarios" class="search-box" placeholder="🔍 Buscar por nombre o nick...">
+            <div id="resultadosBusqueda"></div>
+        </div>
+    </div>
+
 </div>
 
 <script src="../js/perfil.js"></script>
